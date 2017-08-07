@@ -321,7 +321,12 @@ def set_v2_frontend_backend(lb, custom_attr_dict, custom_attrs):
                 ssl += ' crt__%s' % sni_container
                 tls_sni_presence = True
         if (tls_sni_presence == False):
-            ssl = ''
+            if ll.params['protocol'] == PROTO_TERMINATED_HTTPS:
+                # If default_tls_container/sni_containers not properly defined
+                # fallback to 'lb_ssl_cert_path' like in LBaaSv1
+                ssl = 'ssl crt haproxy_ssl_cert_path no-sslv3'
+            else:
+                ssl = ''
         else:
             ssl += ' no-sslv3'
 
