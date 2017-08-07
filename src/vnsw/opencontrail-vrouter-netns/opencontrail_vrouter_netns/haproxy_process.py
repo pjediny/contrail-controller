@@ -9,6 +9,7 @@ try:
     import cert_mgr.barbican_cert_manager as barbican_cert_mgr
 except ImportError:
     pass
+from os.path import join
 
 LBAAS_DIR = "/var/lib/contrail/loadbalancer"
 HAPROXY_DIR = LBAAS_DIR + "/" + "haproxy"
@@ -57,9 +58,8 @@ def update_ssl_config(haproxy_config,
     return haproxy_config
 
 def get_haproxy_config_file(cfg_file, dir_name):
-    f = open(cfg_file)
-    content = f.read()
-    f.close()
+    with open(cfg_file) as cfg_f:
+        content = cfg_f.read()
 
     lb_ssl_cert_path = ''
     lbaas_auth_conf = '/etc/contrail/contrail-lbaas-auth.conf'
@@ -78,28 +78,41 @@ def get_haproxy_config_file(cfg_file, dir_name):
             lbaas_auth_conf = KeyValue[1]
     if 'ssl crt' in haproxy_config:
         if lb_version == 'v1':
-            if not (os.path.isfile(lb_ssl_cert_path)):
+            if not os.path.isfile(lb_ssl_cert_path):
                 msg = "%s is missing for "\
                       "Loadbalancer-ID %s" %(lb_ssl_cert_path, lb_uuid)
                 logging.error(msg)
                 return None
             haproxy_config = update_ssl_config(haproxy_config,
-                             lb_ssl_cert_path, dir_name);
+                             lb_ssl_cert_path, dir_name)
         else:
-            if not (os.path.isfile(lbaas_auth_conf)):
+            if not os.path.isfile(lbaas_auth_conf):
                 msg = "%s is missing for "\
                       "Loadbalancer-ID %s" %(lbaas_auth_conf, lb_uuid)
                 logging.error(msg)
-                return None
-            haproxy_config = barbican_cert_mgr.update_ssl_config(
-                             haproxy_config, lbaas_auth_conf, dir_name)
+                if not lb_ssl_cert_path:
+                    msg = "Fallback to 'lb_ssl_cert_path' for " \
+                          "Loadbalancer-ID %s not available" % (lb_uuid, )
+                    logging.error(msg)
+                    return None
+                else:
+                    if not os.path.isfile(lb_ssl_cert_path):
+                        msg = "%s as fallback lb_ssl_cert_path is missing for "\
+                              "Loadbalancer-ID %s" %(lb_ssl_cert_path, lb_uuid)
+                        logging.error(msg)
+                        return None
+                    haproxy_config = update_ssl_config(haproxy_config,
+                        lb_ssl_cert_path, dir_name)
+
+            else:
+                haproxy_config = barbican_cert_mgr.update_ssl_config(
+                                    haproxy_config, lbaas_auth_conf, dir_name)
         if haproxy_config is None:
             return None
 
-    haproxy_cfg_file = dir_name + "/" + HAPROXY_PROCESS_CONF
-    f = open(haproxy_cfg_file, 'w+')
-    f.write(haproxy_config)
-    f.close()
+    haproxy_cfg_filename = join(dir_name, HAPROXY_PROCESS_CONF)
+    with open(haproxy_cfg_filename, 'w+') as haproxy_cfg_file:
+        haproxy_cfg_file.write(haproxy_config)
 
     return haproxy_cfg_file
 
